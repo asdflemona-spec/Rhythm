@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - 'game.zip'
       - 'upload/*.zip'
       - '.github/workflows/rhythm.yml'
 
@@ -28,17 +29,23 @@ jobs:
           import stat
           import zipfile
 
-          files = sorted(glob.glob("upload/*.zip"))
+          files = sorted(set(
+              glob.glob("upload/*.zip") +
+              glob.glob("*.zip")
+          ))
+
           if not files:
               print("No ZIP found. Using repository files.")
           else:
               file = files[-1]
               print("Extracting:", file)
+
               with zipfile.ZipFile(file) as z:
                   for item in z.infolist():
                       name = item.filename
                       p = pathlib.PurePosixPath(name)
                       mode = item.external_attr >> 16
+
                       if (
                           p.is_absolute()
                           or ".." in p.parts
@@ -47,7 +54,10 @@ jobs:
                           or stat.S_ISLNK(mode)
                       ):
                           raise RuntimeError("Unsafe ZIP entry")
+
                   z.extractall(".")
+
+              print("ZIP extraction complete")
           PY
 
       - name: Setup Java 17
@@ -91,7 +101,7 @@ jobs:
       - name: Check Android project
         shell: bash
         run: |
-          echo "Checking project..."
+          echo "Checking project files..."
           ls -la
 
           if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
@@ -103,6 +113,8 @@ jobs:
             echo "ERROR: app folder not found"
             exit 1
           fi
+
+          echo "Android project found!"
 
       - name: Build debug APK
         shell: bash
