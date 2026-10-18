@@ -1,0 +1,59 @@
+
+name: Rhythm APK Builder
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'upload/*.zip'
+      - '.github/workflows/rhythm.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unzip game
+        run: |
+          python3 - <<'PY'
+          import glob, zipfile
+          files = sorted(glob.glob("upload/*.zip"))
+          if files:
+              with zipfile.ZipFile(files[-1]) as z:
+                  for item in z.infolist():
+                      name = item.filename
+                      parts = name.replace("\\", "/").split("/")
+                      if name.startswith("/") or ".." in parts:
+                          raise Exception("Unsafe ZIP")
+                  z.extractall(".")
+          PY
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rhythm-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
