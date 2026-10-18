@@ -16,23 +16,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unzip game
+      - name: Extract game ZIP
         shell: bash
         run: |
           python3 - <<'PY'
           import glob
-          import os
           import pathlib
           import stat
           import zipfile
 
           files = sorted(glob.glob("upload/*.zip"))
-          if files:
-              print("Extracting:", files[-1])
-              with zipfile.ZipFile(files[-1]) as z:
+          if not files:
+              print("No ZIP found. Using repository files.")
+          else:
+              file = files[-1]
+              print("Extracting:", file)
+              with zipfile.ZipFile(file) as z:
                   for item in z.infolist():
                       name = item.filename
                       p = pathlib.PurePosixPath(name)
@@ -41,13 +43,11 @@ jobs:
                           p.is_absolute()
                           or ".." in p.parts
                           or "\\" in name
-                          or p.parts[0] == ".github"
+                          or (p.parts and p.parts[0] == ".github")
                           or stat.S_ISLNK(mode)
                       ):
                           raise RuntimeError("Unsafe ZIP entry")
                   z.extractall(".")
-          else:
-              print("No ZIP found. Using repository files.")
           PY
 
       - name: Setup Java 17
@@ -56,25 +56,55 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Install Android SDK
         shell: bash
         run: |
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+
+          curl -fsSL \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+            -o /tmp/android-tools.zip
+
+          unzip -q /tmp/android-tools.zip -d /tmp/android-tools
+
+          mv /tmp/android-tools/cmdline-tools \
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Check Project
+      - name: Check Android project
+        shell: bash
         run: |
+          echo "Checking project..."
           ls -la
-          test -f settings.gradle || test -f settings.gradle.kts
-          test -d app
 
-      - name: Build APK
+          if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
+            echo "ERROR: settings.gradle not found"
+            exit 1
+          fi
+
+          if [ ! -d app ]; then
+            echo "ERROR: app folder not found"
+            exit 1
+          fi
+
+      - name: Build debug APK
         shell: bash
         run: |
           if [ -f gradlew ]; then
