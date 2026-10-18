@@ -4,69 +4,10 @@ name: Rhythm APK Builder
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
-    paths:
-      - 'upload/*.zip'
-      - '.github/workflows/rhythm.yml'
-
-permissions:
-  contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract ZIP
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import glob
-          import pathlib
-          import zipfile
-
-          files = sorted(glob.glob("upload/*.zip"))
-          if files:
-              with zipfile.ZipFile(files[-1]) as z:
-                  for item in z.infolist():
-                      p = pathlib.PurePosixPath(item.filename)
-                      if (
-                          p.is_absolute()
-                          or ".." in p.parts
-                          or "\\" in item.filename
-                          or item.filename.startswith(".github/")
-                          or ((item.external_attr >> 16) & 0o170000) == 0o120000
-                      ):
-                          raise RuntimeError("Unsafe ZIP entry")
-                  z.extractall(".")
-          PY
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Android
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Build APK
-        run: gradle --no-daemon assembleDebug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rhythm-APK
-          path: app/build/outputs/apk/debug/*.apk
+      - name: Check Actions
+        run: echo "GitHub Actions works!"
